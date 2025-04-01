@@ -1,0 +1,38 @@
+LOG_FILE="$HOME/claude-desktop-launcher.log"
+echo "--- Claude Desktop Launcher Start ---" >> "$LOG_FILE"
+echo "Timestamp: $(date)" >> "$LOG_FILE"
+echo "Arguments: $@" >> "$LOG_FILE"
+
+if ! command -v electron33 &> /dev/null; then
+    echo "Error: electron33 is not installed. Please install it with 'xbps-install -S electron33'" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+IS_WAYLAND=false
+if [ ! -z "$WAYLAND_DISPLAY" ]; then
+  IS_WAYLAND=true
+  echo "Wayland detected" >> "$LOG_FILE"
+fi
+
+APP_PATH="/usr/lib/claude-desktop/app.asar"
+if [ ! -f "$APP_PATH" ]; then
+    echo "Error: Claude Desktop app.asar not found at $APP_PATH" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+ELECTRON_ARGS=("$APP_PATH")
+
+if [ "$IS_WAYLAND" = true ]; then
+  echo "Adding Wayland flags" >> "$LOG_FILE"
+  ELECTRON_ARGS+=("--enable-features=UseOzonePlatform,WaylandWindowDecorations" "--ozone-platform=wayland")
+fi
+
+echo "Changing directory to /usr/lib/claude-desktop" >> "$LOG_FILE"
+cd /usr/lib/claude-desktop || { echo "Failed to cd to /usr/lib/claude-desktop" >> "$LOG_FILE"; exit 1; }
+
+echo "Executing: electron33 ${ELECTRON_ARGS[*]} $*" >> "$LOG_FILE"
+electron33 "${ELECTRON_ARGS[@]}" "$@" >> "$LOG_FILE" 2>&1
+EXIT_CODE=$?
+echo "Electron exited with code: $EXIT_CODE" >> "$LOG_FILE"
+echo "--- Claude Desktop Launcher End ---" >> "$LOG_FILE"
+exit $EXIT_CODE
