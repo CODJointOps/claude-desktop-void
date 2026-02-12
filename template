@@ -1,199 +1,29 @@
+# Template file for 'claude-desktop'
 pkgname=claude-desktop
-version=1.0.0
+version=1.1.2685
 revision=1
 archs="x86_64"
-build_style=""
-hostmakedepends="p7zip wget icoutils ImageMagick nodejs tar"
-depends="nodejs"
-short_desc="Claude AI desktop client for Void Linux"
-maintainer="Wizzard <retard@bandaholics.cash>"
-license="Proprietary"
-homepage="https://anthropic.com"
+depends="electron35 desktop-file-utils hicolor-icon-theme"
+short_desc="Claude AI Desktop Application"
+maintainer="rich@bandaholics.cash"
+license="custom:Claude"
+homepage="https://claude.ai"
+changelog="https://github.com/patrickjaja/claude-desktop-bin/releases"
 repository="nonfree"
 restricted=yes
-wrksrc="claude-build"
-
-_claude_url="https://storage.googleapis.com/osprey-downloads-c02f6a0d-347c-492b-a752-3e0651722e97/nest-win-x64/Claude-Setup-x64.exe"
-
-do_fetch() {
-    mkdir -p ${wrksrc}
-    cd ${wrksrc}
-    
-    msg_normal "Downloading Claude Desktop installer...\n"
-    wget -O "Claude-Setup-x64.exe" "${_claude_url}" || return 1
-}
-
-do_extract() {
-    cd ${wrksrc}
-    
-    msg_normal "Extracting resources...\n"
-    7z x -y "Claude-Setup-x64.exe" || return 1
-    
-    local NUPKG_PATH=$(find . -name "AnthropicClaude-*.nupkg" | head -1)
-    if [ -z "$NUPKG_PATH" ]; then
-        msg_error "Could not find AnthropicClaude nupkg file\n"
-        return 1
-    fi
-    
-    version=$(echo "$NUPKG_PATH" | sed -n 's/.*AnthropicClaude-\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p')
-    if [ -z "$version" ]; then
-        msg_error "Could not extract version from nupkg filename: $NUPKG_PATH\n"
-        return 1
-    fi
-    msg_normal "Detected Claude version: $version\n"
-    
-    7z x -y "$NUPKG_PATH" || return 1
-    
-    msg_normal "Processing icons...\n"
-    wrestool -x -t 14 "lib/net45/claude.exe" -o claude.ico || return 1
-    icotool -x claude.ico || return 1
-}
-
-do_build() {
-    cd ${wrksrc}
-    
-    mkdir -p electron-app
-    cp "lib/net45/resources/app.asar" electron-app/ || return 1
-    cp -r "lib/net45/resources/app.asar.unpacked" electron-app/ || return 1
-    
-    cd electron-app
-    npm install -g asar || return 1
-    asar extract app.asar app.asar.contents || return 1
-    
-    msg_normal "Creating stub native module...\n"
-    mkdir -p app.asar.contents/node_modules/claude-native/ || return 1
-    cat > app.asar.contents/node_modules/claude-native/index.js << 'EOF'
-const KeyboardKey = {
-  Backspace: 43,
-  Tab: 280,
-  Enter: 261,
-  Shift: 272,
-  Control: 61,
-  Alt: 40,
-  CapsLock: 56,
-  Escape: 85,
-  Space: 276,
-  PageUp: 251,
-  PageDown: 250,
-  End: 83,
-  Home: 154,
-  LeftArrow: 175,
-  UpArrow: 282,
-  RightArrow: 262,
-  DownArrow: 81,
-  Delete: 79,
-  Meta: 187
-};
-
-Object.freeze(KeyboardKey);
-
-module.exports = {
-  getWindowsVersion: () => "10.0.0",
-  setWindowEffect: () => {},
-  removeWindowEffect: () => {},
-  getIsMaximized: () => false,
-  flashFrame: () => {},
-  clearFlashFrame: () => {},
-  showNotification: () => {},
-  setProgressBar: () => {},
-  clearProgressBar: () => {},
-  setOverlayIcon: () => {},
-  clearOverlayIcon: () => {},
-  KeyboardKey
-};
-EOF
-    
-    mkdir -p app.asar.contents/resources || return 1
-    mkdir -p app.asar.contents/resources/i18n || return 1
-    
-    cp ../lib/net45/resources/Tray* app.asar.contents/resources/ || return 1
-    cp ../lib/net45/resources/*-*.json app.asar.contents/resources/i18n/ || return 1
-    
-    cd app.asar.contents
-    wget -O main_window.tgz https://github.com/emsi/claude-desktop/raw/refs/heads/main/assets/main_window.tgz || return 1
-    tar -zxvf main_window.tgz || return 1
-    rm main_window.tgz
-    cd ..
-    
-    asar pack app.asar.contents app.asar || return 1
-}
+_tag=v${version}-2
+distfiles="https://github.com/patrickjaja/claude-desktop-bin/releases/download/${_tag}/claude-desktop-${version}-linux.tar.gz"
+checksum=e3b5af29cb1e3e6a5f01225aca4480358737f51d91d60b1d5abdc41e0d862ccd
 
 do_install() {
-    cd ${wrksrc}
-    
-    vmkdir usr/lib/${pkgname}
-    vinstall electron-app/app.asar 644 usr/lib/${pkgname}
-    vcopy electron-app/app.asar.unpacked usr/lib/${pkgname}
-    
-    vmkdir usr/lib/${pkgname}/app.asar.unpacked/node_modules/claude-native
-    cat > ${DESTDIR}/usr/lib/${pkgname}/app.asar.unpacked/node_modules/claude-native/index.js << 'EOF'
-const KeyboardKey = {
-  Backspace: 43,
-  Tab: 280,
-  Enter: 261,
-  Shift: 272,
-  Control: 61,
-  Alt: 40,
-  CapsLock: 56,
-  Escape: 85,
-  Space: 276,
-  PageUp: 251,
-  PageDown: 250,
-  End: 83,
-  Home: 154,
-  LeftArrow: 175,
-  UpArrow: 282,
-  RightArrow: 262,
-  DownArrow: 81,
-  Delete: 79,
-  Meta: 187
-};
+	vmkdir usr/lib/${pkgname}
+	vcopy app/* usr/lib/${pkgname}
 
-Object.freeze(KeyboardKey);
+	vbin ${FILESDIR}/claude-desktop
 
-module.exports = {
-  getWindowsVersion: () => "10.0.0",
-  setWindowEffect: () => {},
-  removeWindowEffect: () => {},
-  getIsMaximized: () => false,
-  flashFrame: () => {},
-  clearFlashFrame: () => {},
-  showNotification: () => {},
-  setProgressBar: () => {},
-  clearProgressBar: () => {},
-  setOverlayIcon: () => {},
-  clearOverlayIcon: () => {},
-  KeyboardKey
-};
-EOF
-    
-    declare -A icon_files=(
-        ["16"]="claude_13_16x16x32.png"
-        ["24"]="claude_11_24x24x32.png"
-        ["32"]="claude_10_32x32x32.png"
-        ["48"]="claude_8_48x48x32.png"
-        ["64"]="claude_7_64x64x32.png"
-        ["256"]="claude_6_256x256x32.png"
-    )
-    
-    for size in 16 24 32 48 64 256; do
-        if [ -f "${icon_files[$size]}" ]; then
-            vmkdir usr/share/icons/hicolor/${size}x${size}/apps
-            vinstall "${icon_files[$size]}" 644 usr/share/icons/hicolor/${size}x${size}/apps claude-desktop.png
-        fi
-    done
-    
-    vmkdir usr/share/applications
-    vinstall ${FILESDIR}/claude-desktop.desktop 644 usr/share/applications
-    
-    vmkdir usr/bin
-    vinstall ${FILESDIR}/claude-desktop 755 usr/bin
-}
+	vinstall ${FILESDIR}/claude-desktop.desktop 0644 usr/share/applications
 
-post_install() {
-    vlicense ${FILESDIR}/LICENSE
-    
-    if [ -f "${DESTDIR}/usr/lib/${pkgname}/node_modules/electron/dist/chrome-sandbox" ]; then
-        chmod 4755 ${DESTDIR}/usr/lib/${pkgname}/node_modules/electron/dist/chrome-sandbox
-    fi
+	if [ -f icons/claude-desktop.png ]; then
+		vinstall icons/claude-desktop.png 0644 usr/share/icons/hicolor/256x256/apps
+	fi
 }

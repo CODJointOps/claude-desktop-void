@@ -1,0 +1,77 @@
+name: Auto Update Claude Desktop Template
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-template:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install -y curl jq
+
+      - name: Fetch Latest Release
+        id: get_release
+        run: |
+          RELEASES=$(curl -s "https://api.github.com/repos/patrickjaja/claude-desktop-bin/releases?per_page=10")
+          TAG=$(echo "$RELEASES" | jq -r '[.[] | select(.prerelease == false)] | sort_by(.published_at) | reverse | .[0].tag_name')
+          if [[ -z "$TAG" || "$TAG" == "null" ]]; then
+            echo "No release found"
+            exit 0
+          fi
+
+          # Extract version (strip v prefix and -N pkgrel suffix)
+          VERSION=$(echo "$TAG" | sed -E 's/^v//;s/-[0-9]+$//')
+
+          TARBALL_URL=$(echo "$RELEASES" | jq -r "[.[] | select(.tag_name == \"$TAG\")] | .[0].assets[] | select(.name | test(\"linux\\.tar\\.gz$\")) | .browser_download_url")
+
+          if [[ -z "$TARBALL_URL" || "$TARBALL_URL" == "null" ]]; then
+            echo "No linux tarball found in release $TAG"
+            exit 0
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "tarball_url=$TARBALL_URL" >> $GITHUB_OUTPUT
+
+      - name: Read Current State
+        if: steps.get_release.outputs.version
+        id: check_current
+        run: |
+          CURRENT_VERSION=$(grep '^version=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
+          CURRENT_TAG=$(grep '^_tag=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download and Checksum
+        if: steps.get_release.outputs.tag && steps.get_release.outputs.tag != steps.check_current.outputs.current_tag
+        id: download
+        run: |
+          curl -Lo claude-desktop.tar.gz "${{ steps.get_release.outputs.tarball_url }}"
+          SHA256=$(sha256sum claude-desktop.tar.gz | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Update Template
+        if: steps.get_release.outputs.tag && steps.get_release.outputs.tag != steps.check_current.outputs.current_tag
+        run: |
+          sed -i "s/^version=.*/version=${{ steps.get_release.outputs.version }}/" template
+          sed -i "s/^_tag=.*/_tag=${{ steps.get_release.outputs.tag }}/" template
+          sed -i "s/^checksum=.*/checksum=${{ steps.download.outputs.sha256 }}/" template
+
+      - name: Commit and Push
+        if: steps.get_release.outputs.tag && steps.get_release.outputs.tag != steps.check_current.outputs.current_tag
+        run: |
+          git config user.name "Wizzard"
+          git config user.email "rich@bandaholics.cash"
+          git add template
+          if ! git diff --cached --quiet; then
+            git commit -m "Update to ${{ steps.get_release.outputs.tag }} [auto]"
+            git pull --rebase origin master
+            git push
+          fi
