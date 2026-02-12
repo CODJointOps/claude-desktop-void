@@ -29,7 +29,7 @@ jobs:
           # Extract version (strip v prefix and -N pkgrel suffix)
           VERSION=$(echo "$TAG" | sed -E 's/^v//;s/-[0-9]+$//')
 
-          TARBALL_URL=$(echo "$RELEASES" | jq -r "[.[] | select(.tag_name == \"$TAG\")] | .[0].assets[] | select(.name | test(\"linux\\.tar\\.gz$\")) | .browser_download_url")
+          TARBALL_URL=$(echo "$RELEASES" | jq -r "[.[] | select(.tag_name == \"$TAG\")] | .[0].assets[] | select(.name | endswith(\"linux.tar.gz\")) | .browser_download_url")
 
           if [[ -z "$TARBALL_URL" || "$TARBALL_URL" == "null" ]]; then
             echo "No linux tarball found in release $TAG"
