@@ -45,10 +45,8 @@ jobs:
         id: check_current
         run: |
           CURRENT_VERSION=$(grep '^version=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
-          CURRENT_REVISION=$(grep '^revision=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
           CURRENT_TAG=$(grep '^_tag=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "current_revision=$CURRENT_REVISION" >> $GITHUB_OUTPUT
           echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
 
       - name: Download and Checksum
@@ -62,35 +60,18 @@ jobs:
       - name: Update Template
         if: steps.get_release.outputs.tag && steps.get_release.outputs.tag != steps.check_current.outputs.current_tag
         run: |
-          NEW_VERSION="${{ steps.get_release.outputs.version }}"
-          CURRENT_VERSION="${{ steps.check_current.outputs.current_version }}"
-          CURRENT_REVISION="${{ steps.check_current.outputs.current_revision }}"
-
-          if [[ -z "$CURRENT_REVISION" ]]; then
-            CURRENT_REVISION=1
-          fi
-
-          if [[ "$NEW_VERSION" == "$CURRENT_VERSION" ]]; then
-            NEW_REVISION=$((CURRENT_REVISION + 1))
-          else
-            NEW_REVISION=1
-          fi
-
           sed -i "s/^version=.*/version=${{ steps.get_release.outputs.version }}/" template
-          sed -i "s/^revision=.*/revision=${NEW_REVISION}/" template
           sed -i "s/^_tag=.*/_tag=${{ steps.get_release.outputs.tag }}/" template
           sed -i "s/^checksum=.*/checksum=${{ steps.download.outputs.sha256 }}/" template
 
       - name: Commit and Push
         if: steps.get_release.outputs.tag && steps.get_release.outputs.tag != steps.check_current.outputs.current_tag
         run: |
-          git config user.name "gitea-actions[bot]"
-          git config user.email "gitea-actions[bot]@noreply.deadzone.lol"
+          git config user.name "Wizzard"
+          git config user.email "rich@bandaholics.cash"
           git add template
           if ! git diff --cached --quiet; then
-            NEW_VERSION="${{ steps.get_release.outputs.version }}"
-            NEW_REVISION=$(grep '^revision=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
-            git commit -m "Update to ${{ steps.get_release.outputs.tag }} -> ${NEW_VERSION}_${NEW_REVISION} [auto]"
+            git commit -m "Update to ${{ steps.get_release.outputs.tag }} [auto]"
             git pull --rebase origin master
             git push
           fi
