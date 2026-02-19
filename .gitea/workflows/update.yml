@@ -19,25 +19,48 @@ jobs:
       - name: Fetch Latest Release
         id: get_release
         run: |
-          RELEASES=$(curl -s "https://api.github.com/repos/patrickjaja/claude-desktop-bin/releases?per_page=10")
-          TAG=$(echo "$RELEASES" | jq -r '[.[] | select(.prerelease == false)] | sort_by(.published_at) | reverse | .[0].tag_name')
-          if [[ -z "$TAG" || "$TAG" == "null" ]]; then
+          RELEASES=$(curl -s "https://api.github.com/repos/patrickjaja/claude-desktop-bin/releases?per_page=100")
+          LATEST_TAG=$(echo "$RELEASES" | jq -r '[.[] | select(.prerelease == false)] | sort_by(.published_at) | reverse | .[0].tag_name')
+          if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
             echo "No release found"
             exit 0
           fi
 
-          # Extract version (strip v prefix and -N pkgrel suffix)
-          VERSION=$(echo "$TAG" | sed -E 's/^v//;s/-[0-9]+$//')
+          # Extract version from the latest published tag.
+          VERSION=$(echo "$LATEST_TAG" | sed -E 's/^v//;s/-[0-9]+$//')
+          CURRENT_VERSION=$(grep '^version=' template | cut -d= -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
+          TARGET_TAG="$LATEST_TAG"
 
-          TARBALL_URL=$(echo "$RELEASES" | jq -r "[.[] | select(.tag_name == \"$TAG\")] | .[0].assets[] | select(.name | endswith(\"linux.tar.gz\")) | .browser_download_url")
+          # For a brand new upstream version, prefer the base tag (vX.Y.Z) first.
+          # Only follow higher suffix tags (vX.Y.Z-N) once we are already on that version.
+          if [[ "$VERSION" != "$CURRENT_VERSION" ]]; then
+            BASE_TAG="v${VERSION}"
+            TARGET_TAG=$(echo "$RELEASES" | jq -r --arg base "$BASE_TAG" \
+              '[.[] | select(.prerelease == false and .tag_name == $base)] | .[0].tag_name // empty')
+
+            if [[ -z "$TARGET_TAG" || "$TARGET_TAG" == "null" ]]; then
+              TARGET_TAG=$(echo "$RELEASES" | jq -r --arg version "$VERSION" \
+                '[.[]
+                  | select(.prerelease == false)
+                  | select((.tag_name | sub("^v";"") | sub("-[0-9]+$";"")) == $version)
+                ] | sort_by(.published_at) | .[0].tag_name // empty')
+            fi
+          fi
+
+          if [[ -z "$TARGET_TAG" || "$TARGET_TAG" == "null" ]]; then
+            echo "Unable to select target tag for version $VERSION"
+            exit 0
+          fi
+
+          TARBALL_URL=$(echo "$RELEASES" | jq -r "[.[] | select(.tag_name == \"$TARGET_TAG\")] | .[0].assets[] | select(.name | endswith(\"linux.tar.gz\")) | .browser_download_url")
 
           if [[ -z "$TARBALL_URL" || "$TARBALL_URL" == "null" ]]; then
-            echo "No linux tarball found in release $TAG"
+            echo "No linux tarball found in release $TARGET_TAG"
             exit 0
           fi
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "tag=$TARGET_TAG" >> $GITHUB_OUTPUT
           echo "tarball_url=$TARBALL_URL" >> $GITHUB_OUTPUT
 
       - name: Read Current State
