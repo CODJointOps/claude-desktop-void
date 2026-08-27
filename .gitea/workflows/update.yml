@@ -20,7 +20,7 @@ jobs:
         id: get_release
         run: |
           RELEASES=$(curl -s "https://api.github.com/repos/patrickjaja/claude-desktop-bin/releases?per_page=100")
-          LATEST_TAG=$(echo "$RELEASES" | jq -r '[.[] | select(.prerelease == false)] | sort_by(.published_at) | reverse | .[0].tag_name')
+          LATEST_TAG=$(echo "$RELEASES" | jq -r '[.[] | select(.draft == false and .prerelease == false)] | sort_by((.tag_name | sub("^[^0-9]*";"") | split("-") | .[0] | [scan("[0-9]+")] | map(tonumber)), (.tag_name | sub("^[^0-9]*";"") | split("-") | .[1:] | join(".") | [scan("[0-9]+")] | map(tonumber)), .published_at) | last | .tag_name')
           if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
             echo "No release found"
             exit 0
